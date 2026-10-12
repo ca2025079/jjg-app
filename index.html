@@ -49,6 +49,18 @@
             <button class="b" id="btn-clear">지우기</button>
           </div>
         </div>
+        <div class="loader" id="loader" hidden>
+          <div class="btns">
+            <button class="b primary" id="btn-pick-files">파일 선택</button>
+            <button class="b primary" id="btn-pick-folder">폴더 선택</button>
+            <button class="b" id="btn-pick-image">캡처 이미지</button>
+          </div>
+          <p class="muted">파일·폴더를 고르면 이름을 <b>정확히</b> 읽어 옵니다(파일은 올라가지 않음). 탐색기에서 파일을 이 칸으로 끌어다 놓거나, 캡처 화면을 <b>Ctrl+V</b>로 붙여 넣어도 됩니다. 캡처는 글자 인식이라 결과를 꼭 확인하세요.</p>
+          <p class="ocr-status" id="ocr-status" hidden></p>
+          <input type="file" id="pick-files" multiple hidden>
+          <input type="file" id="pick-folder" webkitdirectory directory multiple hidden>
+          <input type="file" id="pick-image" accept="image/*" hidden>
+        </div>
         <textarea id="input" spellcheck="false" aria-label="정정할 문장"></textarea>
       </div>
       <div class="pane">

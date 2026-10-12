@@ -27,22 +27,24 @@ const COMMON = [
   ['괄호 표기', /[\[(（][ \t]*정보[ \t]*공시[ \t]*[\])）][ \t]*/g, () => '(정보공시) '],
   ['괄호 표기', /[\[(（][ \t]*현장[ \t]*비치[ \t]*[\])）][ \t]*/g, () => '(현장비치) '],
   ['「」 뒤 띄어쓰기', /」(?=제\d)/g, () => '」 '],
-  ['괄호 뒤 쉼표 삭제', /\)[ \t]*,[ \t]*(?=제\d+조|\d+(?:~\d+)?페이지)/g, () => ') '],
-  ['괄호 뒤 띄어쓰기', /\)(?=제\d+조|\d+(?:~\d+)?페이지)/g, () => ') '],
+  ['괄호 뒤 쉼표 삭제', /\)[ \t]*,[ \t]*(?=제\d+(?:조|장|절|항)|규정집|\d+(?:~\d+)?페이지)/g, () => ') '],
+  ['괄호 뒤 띄어쓰기', /\)(?=제\d+(?:조|장|절|항)|규정집|\d+(?:~\d+)?페이지)/g, () => ') '],
+  ['문서번호 뒤 쉼표', /([가-힣]+-\d+)[ \t]+(?=\d{4}\.\d{2}\.\d{2}\.)/g, (m, a) => `${a}, `],
+  ['표준어', /캡쳐/g, () => '캡처'],
   ['판정 표기', /[<〈《＜][ \t]*(조건부충족|미충족|충족)[ \t]*[>〉》＞]/g, (m, a) => `〈${a}〉`],
   ['판정 표기', /(?<![〈가-힣])(조건부충족|미충족|충족)(?=[ \t]*판정)/g, (m, a) => `〈${a}〉`],
   ['오타', /의 따라/g, () => '에 따라'],
   ['오타', /위원회 에서/g, () => '위원회에서'],
 ];
 
-const LIST_NO = ['목록 번호 형식', /^[ \t]*([A-Za-z])[ \t]*[^\s가-힣A-Za-z\d]*[ \t]*(\d+)[ \t]*[^\s가-힣A-Za-z\d(\[]*[ \t]*/, (m, l, n) => `${l.toLowerCase()}-${n}. `];
+const LIST_NO = ['목록 번호 형식', /^[ \t]*([A-Za-z])[ \t]*[^\s가-힣A-Za-z\d]*[ \t]*(\d+(?:[ \t]*[-–—_][ \t]*\d+)*)[ \t]*[^\s가-힣A-Za-z\d(\[]*[ \t]*/, (m, l, n) => `${l.toLowerCase()}-${n.replace(/[ \t]*[-–—_][ \t]*/g, '-')}. `];
 
 // 목록 줄 맨 앞(알파벳 + 아무 기호·숫자)을 읽어 판단항목 제목(a))인지 자료 번호(a-1.)인지 판단
 // - 숫자가 있고 '확인'으로 끝나지 않으면 자료 번호, 그 밖에는 판단항목 제목 (편람의 판단항목 제목은 모두 '~확인')
 const LIST_HEAD = ['목록 앞부분 형식', /^[ \t]*([A-Za-z])[ \t]*([^\s가-힣A-Za-z]*?)[ \t]*(?=[가-힣(\[「○<〈])/, (m, l, junk, off, str) => {
   const rest = str.slice(m.length).replace(/[.\s]+$/, '');
-  const d = junk.match(/\d+/);
-  if (d && !/확인$/.test(rest)) return `${l.toLowerCase()}-${d[0]}. `;
+  const d = junk.match(/\d+/g);
+  if (d && !/확인$/.test(rest)) return `${l.toLowerCase()}-${d.join('-')}. `;
   return `${l.toLowerCase()}) `;
 }];
 const MODE = {
@@ -64,6 +66,7 @@ const MODE = {
     ['끝 마침표 삭제', /(?<=[가-힣)])\.[ \t]*$/, () => ''],
   ],
   file: [
+    ['경로 지우기', /^[ \t]*"?(?:[A-Za-z]:[\\/]|\\\\)(?:[^"\\/]*[\\/])*([^"\\/]+?)"?[ \t]*$/, (m, n) => n],
     LIST_NO,
     ['파일명 금지문자 변경', /(?<=[가-힣A-Za-z0-9])\/(?=[가-힣A-Za-z0-9])/g, () => '·'],
     ['.pdf 빼기 (저장 시 자동으로 붙음)', /(?:[ \t]*\.pdf)+[ \t]*$/i, () => ''],
@@ -115,11 +118,13 @@ const SUGGEST = {
     ['제안: 학년도 표기', /(\d{4})년도(?![ \t]*\d)/g, (m, y) => `${y}학년도`],
     ['제안: 문장 중간 마침표', /(?<=[함됨음임])\.[ \t]+(?=[가-힣])/g, () => ', '],
   ],
-  list: [], file: [],
+  list: [['제안: [ ] 앞 띄어쓰기 통일', /(?<=[가-힣)])\[/g, () => ' [']],
+  file: [['제안: [ ] 앞 띄어쓰기 통일', /(?<=[가-힣)])\[/g, () => ' [']],
 };
 
 // 목록: 판단항목 알파벳에 맞춰 1부터 다시 번호 매김 (파일명은 현장비치 때문에 빈 번호가 정상이라 제외)
 function renumber(lines, log) {
+  if (lines.some(l => /^[a-z]-\d+-\d+/.test(l))) return lines;
   let head = null; const cnt = {};
   return lines.map((s, i) => {
     const h = s.match(/^([a-z])\) /); if (h) { head = h[1]; return s; }
@@ -163,33 +168,44 @@ function check(lines, mode) {
   const w = [];
   const add = (ln, msg) => w.push({ ln, msg });
   if (mode === 'list' || mode === 'file') {
-    const seen = {}; let head = null;
+    let labels = []; let head = null; let group = '';
+    const flushSeen = () => {
+      const where = group ? `[${group}] ` : '';
+      const kids = {};
+      labels.forEach(lb => { const p = lb.split('-'); for (let k = 1; k < p.length; k++) (kids[p.slice(0, k).join('-')] = kids[p.slice(0, k).join('-')] || new Set()).add(+p[k]); });
+      const miss = [];
+      for (const [par, set] of Object.entries(kids)) { const max = Math.max(...set); for (let k = 1; k <= max; k++) if (!set.has(k)) miss.push(`${par}-${k}`); }
+      const dup = [...new Set(labels.filter((x, i) => labels.indexOf(x) !== i))];
+      if (miss.length) add(null, mode === 'file'
+        ? `${where}파일이 없는 번호: <b>${miss.join(', ')}</b> (현장비치 자료라면 정상입니다. 아니면 목록 번호를 확인해 주세요.)`
+        : `${where}번호가 빠졌습니다: <b>${miss.join(', ')}</b> (1부터 빠짐없이)`);
+      if (dup.length) add(null, `${where}번호가 중복됩니다: <b>${dup.join(', ')}</b>`);
+      labels = [];
+    };
     lines.forEach((s, i) => {
       if (!s) return;
+      const g = s.match(/^\[(.+)\]$/);
+      if (g) { flushSeen(); group = g[1]; return; }  // [판단항목1.1.1.a] 같은 폴더 구분 줄
       const h = s.match(/^([a-z])\) /);
       if (h) { head = h[1]; if (mode === 'list') return; }
-      const it = s.match(/^([a-z])-(\d+)\. /);
+      const it = s.match(/^([a-z])-(\d+(?:-\d+)*)\. /);
       if (!it) { if (!h) add(i + 1, '번호 형식(<b>a-1.</b> 또는 <b>a)</b>)으로 시작하지 않습니다.'); return; }
       if (head && it[1] !== head) add(i + 1, `<b>${head})</b> 판단항목 아래에 <b>${it[1]}-${it[2]}</b> 번호가 있습니다. 알파벳을 맞춰 주세요.`);
-      (seen[it[1]] = seen[it[1]] || []).push(+it[2]);
+      labels.push(`${it[1]}-${it[2]}`);
+      const sp = s.match(/[가-힣·()]{18,}|[가-힣](?:에대한|에따른|에관한|에의한)|[가-힣)]및|및[가-힣(]|\((?:안)\)(?![에의를을은는과와로이가도\s,])[가-힣]/);
+      if (sp) add(i + 1, `띄어쓰기가 빠진 곳이 있습니다(<b>${sp[0].length > 12 ? sp[0].slice(0, 12) + '…' : sp[0]}</b>). 다른 파일명처럼 띄어 써 주세요.`);
       const ip = s.match(/\(정보공시\) (\S+)/);
       if (ip && !/\.$/.test(ip[1])) add(i + 1, `정보공시 목차번호 <b>${ip[1]}</b>가 「대학정보공시 지침서」 목차 표기와 같은지 확인해 주세요. (예: 12-카-2.)`);
       if (mode === 'file') {
+        const ext = s.match(/\.(hwpx?|docx?|xlsx?|pptx?|jpe?g|png|gif|zip|txt)$/i);
+        if (ext) add(i + 1, `PDF가 아닌 파일(<b>.${ext[1]}</b>)입니다. 서면평가자료는 PDF로 변환해서 올립니다.`);
         if (/\(현장비치\)/.test(s)) add(i + 1, '<b>(현장비치)</b> 자료는 파일을 올리지 않습니다. 목록에만 적고 원본은 평가장에 비치합니다.');
         const bad = s.match(/[\\/:*?"<>|]/g);
         if (bad) add(i + 1, `파일명에 쓸 수 없는 문자 <b>${[...new Set(bad)].join(' ')}</b>가 있습니다. 목록 문구에서도 빼 주세요.`);
         if (s.length > 120) add(i + 1, `파일명이 ${s.length}자로 깁니다. 폴더 경로까지 합치면 Windows에서 오류가 날 수 있어 줄이는 것이 좋습니다.`);
       }
     });
-    for (const [l, ns] of Object.entries(seen)) {
-      const max = Math.max(...ns);
-      const miss = []; for (let k = 1; k <= max; k++) if (!ns.includes(k)) miss.push(`${l}-${k}`);
-      const dup = ns.filter((n, i) => ns.indexOf(n) !== i);
-      if (miss.length) add(null, mode === 'file'
-        ? `파일이 없는 번호: <b>${miss.join(', ')}</b> (현장비치 자료라면 정상입니다. 아니면 목록 번호를 확인해 주세요.)`
-        : `번호가 빠졌습니다: <b>${miss.join(', ')}</b> (1부터 빠짐없이)`);
-      if (dup.length) add(null, `번호가 중복됩니다: <b>${[...new Set(dup)].map(n => `${l}-${n}`).join(', ')}</b>`);
-    }
+    flushSeen();
   }
   if (mode === 'status') {
     const vague = ['충분히', '매우', '상당히', '대체로', '크게', '높은 수준', '우수한 수준', '것으로 보임', '것으로 사료', '브로드', '시나브로'];
@@ -263,6 +279,6 @@ b-2. (현장비치) 2024학년도 직원 근무평정 결과 보고`,
 const HINTS = {
   list: '「평가인증시스템」 입증자료 칸에 쓸 목록을 한 줄에 하나씩 넣으세요. 판단항목 제목(a) …)도 함께 넣으면 번호 검사까지 합니다.',
   status: '「현황 및 분석결과」 칸에 쓸 내용을 넣으세요. 한 문단이 한 줄입니다. 글자수 6,000자 제한도 함께 셉니다.',
-  file: '업로드할 파일 이름을 한 줄에 하나씩 넣으세요. 목록 문구와 같은 규칙으로 고칩니다. .pdf는 PDF로 저장할 때 자동으로 붙으므로 결과에서는 뺍니다. 결과를 저장 창의 파일 이름 칸에 그대로 붙여 넣으세요.',
+  file: '파일 이름을 한 줄에 하나씩 넣거나, 위 버튼으로 파일·폴더·캡처를 불러오세요. 목록 문구와 같은 규칙으로 고칩니다. .pdf는 PDF로 저장할 때 자동으로 붙으므로 결과에서는 뺍니다. 결과를 저장 창의 파일 이름 칸에 그대로 붙여 넣으세요.',
 };
 

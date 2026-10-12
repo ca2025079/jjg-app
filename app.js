@@ -70,15 +70,17 @@ function render() {
   $('output').innerHTML = src.trim() ? b.map((line, i) => `<div class="line${wl[i + 1] ? ' w' : ''}"${wl[i + 1] ? ` data-n="${wl[i + 1]}건"` : ''}>${lineHtml((a[i] || '').replace(/[ \t]+$/, ''), au[i] || '', line)}</div>`).join('')
     : '<span class="empty">입력하면 바로 정정됩니다.</span>';
   const nSug = r.log.filter(x => x.sug).length;
+  const nWarn = r.warns.length + (mode === 'file' ? folderWarns.length : 0);
   const len = r.text.replace(/\n/g, '').length;
   $('stats').innerHTML =
     `<span class="stat ok">자동 수정 ${r.log.length - nSug}건</span>` +
     (useSug ? `<span class="stat warn">제안 반영 ${nSug}건</span>` : '') +
-    `<span class="stat ${r.warns.length ? 'warn' : 'ok'}">${useSug ? '남은 ' : ''}확인 필요 ${r.warns.length}건</span>` +
+    `<span class="stat ${nWarn ? 'warn' : 'ok'}">${useSug ? '남은 ' : ''}확인 필요 ${nWarn}건</span>` +
     (mode === 'status' ? `<span class="stat ${len > 6000 ? 'over' : ''}">글자수 ${comma(len)} / 6,000자</span>` : '');
   const ws = r.warns.slice();
+  if (mode === 'file') ws.push(...folderWarns);
   if (mode === 'status' && len > 6000) ws.unshift({ msg: `<b>글자수 초과</b> · ${comma(len)}자입니다. 평가요소별 입력칸은 6,000자(띄어쓰기 포함)까지입니다.` });
-  $('warns').innerHTML = ws.map(x => `<li>${x.ln ? `<span class="lnb">${x.ln}줄</span>` : '<span class="lnb">전체</span>'}${x.msg}</li>`).join('');
+  $('warns').innerHTML = ws.map(x => `<li><span class="lnb">${x.ln ? x.ln + '줄' : (x.tag || '전체')}</span>${x.msg}</li>`).join('');
   $('alert').classList.toggle('ok', !ws.length);
   $('alert-count').textContent = ws.length;
   $('alert').querySelector('h2').textContent = ws.length ? '확인 필요' : '확인할 부분이 없습니다';
@@ -94,6 +96,8 @@ function setMode(m) {
   document.querySelectorAll('.mode').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
   $('hint').textContent = HINTS[m];
   $('input').value = drafts[m] ?? '';
+  $('loader').hidden = m !== 'file';
+  if (m !== 'file') folderWarns = [];
   render();
 }
 
@@ -101,7 +105,7 @@ let typing;
 $('input').addEventListener('input', () => { clearTimeout(typing); typing = setTimeout(render, 120); });
 document.querySelectorAll('.mode').forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode)));
 $('btn-sample').onclick = () => { $('input').value = SAMPLES[mode]; render(); };
-$('btn-clear').onclick = () => { $('input').value = ''; render(); $('input').focus(); };
+$('btn-clear').onclick = () => { folderWarns = []; $('input').value = ''; render(); $('input').focus(); };
 $('btn-apply').onclick = () => { $('input').value = last.text; render(); toast('입력칸에 반영했습니다'); };
 $('show-diff').onchange = e => $('output').classList.toggle('clean', !e.target.checked);
 $('use-sug').checked = useSug;
@@ -132,6 +136,157 @@ $('btn-save').onclick = async () => {
   $('btn-save').disabled = false;
   toast(error ? '저장하지 못했습니다: ' + error.message : '정정 기록을 저장했습니다');
 };
+
+
+// ---------- 증빙파일명: 파일·폴더·캡처 불러오기 ----------
+let folderWarns = [];
+const natural = (a, b) => a.localeCompare(b, 'ko', { numeric: true });
+
+function addLines(lines) {
+  const cur = $('input').value.trim();
+  const isSample = cur === SAMPLES.file.trim();
+  $('input').value = (cur && !isSample ? cur + '\n' : '') + lines.join('\n');
+  render();
+  $('input').scrollTop = $('input').scrollHeight;
+}
+
+// 폴더 이름 점검: 평가영역N / 평가준거N.N / 평가요소N.N.N / 판단항목N.N.N.a
+const LEVELS = [
+  { word: '평가영역', re: /^평가영역\d+$/, fix: s => s.replace(/\s+/g, '') },
+  { word: '평가준거', re: /^평가준거\d+\.\d+$/, fix: s => s.replace(/\s+/g, '') },
+  { word: '평가요소', re: /^평가요소\d+\.\d+\.\d+$/, fix: s => s.replace(/\s+/g, '') },
+  { word: '판단항목', re: /^판단항목\d+\.\d+\.\d+\.[a-z]$/, fix: s => s.replace(/\s+/g, '').replace(/[A-Z]$/, c => c.toLowerCase()) },
+];
+function checkFolders(entries) {
+  const w = []; const seen = new Set();
+  const warn = msg => { if (!seen.has(msg)) { seen.add(msg); w.push({ tag: '폴더', msg }); } };
+  entries.forEach(({ path, name }) => {
+    const segs = path.split('/').slice(0, -1);
+    segs.forEach((seg, i) => {
+      const lv = LEVELS.find(l => seg.replace(/\s+/g, '').startsWith(l.word));
+      if (!lv) return;
+      if (!lv.re.test(seg)) warn(`폴더 이름 <b>${esc(seg)}</b> → <b>${esc(lv.fix(seg))}</b> 형식으로 맞춰 주세요. (${esc(segs.slice(0, i + 1).join(' > '))})`);
+      const prev = segs[i - 1] && segs[i - 1].replace(/\s+/g, '').match(/[\d.]+[a-z]?$/i);
+      const me = seg.replace(/\s+/g, '').match(/(\d+(?:\.\d+)*)(?:\.[a-z])?$/i);
+      if (prev && me && LEVELS.some(l => segs[i - 1].replace(/\s+/g, '').startsWith(l.word)) && !me[1].startsWith(prev[0].replace(/\.[a-z]$/i, '')))
+        warn(`<b>${esc(seg)}</b>가 상위 폴더 <b>${esc(segs[i - 1])}</b>와 번호가 맞지 않습니다.`);
+    });
+    const judge = segs.map(x => x.replace(/\s+/g, '')).reverse().find(x => x.startsWith('판단항목'));
+    const fl = judge && judge.match(/\.([a-z])$/i);
+    const nl = name.match(/^\s*([A-Za-z])\s*[-–—_]/);
+    if (fl && nl && fl[1].toLowerCase() !== nl[1].toLowerCase())
+      warn(`<b>${esc(name)}</b> 파일이 <b>${esc(judge)}</b> 폴더에 있습니다. 판단항목 알파벳(${fl[1].toLowerCase()})과 파일 번호가 다릅니다.`);
+  });
+  return w;
+}
+
+function loadEntries(entries) {
+  entries = entries.filter(e => !/^(\.|~\$|thumbs\.db$|desktop\.ini$)/i.test(e.name));
+  if (!entries.length) return toast('불러올 파일이 없습니다');
+  entries.sort((a, b) => natural(a.path, b.path));
+  folderWarns = entries.some(e => e.path.includes('/')) ? checkFolders(entries) : [];
+  const out = []; let last = null;
+  entries.forEach(e => {
+    const parent = e.path.includes('/') ? e.path.split('/').slice(-2, -1)[0] : '';
+    if (parent && parent !== last) { out.push(`[${parent}]`); last = parent; }
+    out.push(e.name.replace(/\.pdf$/i, ''));
+  });
+  addLines(out);
+  toast(`파일 ${entries.length}개 이름을 불러왔습니다`);
+}
+
+$('btn-pick-files').onclick = () => $('pick-files').click();
+$('btn-pick-folder').onclick = () => $('pick-folder').click();
+$('btn-pick-image').onclick = () => $('pick-image').click();
+$('pick-files').onchange = e => { loadEntries([...e.target.files].map(f => ({ name: f.name, path: f.name }))); e.target.value = ''; };
+$('pick-folder').onchange = e => { loadEntries([...e.target.files].map(f => ({ name: f.name, path: f.webkitRelativePath || f.name }))); e.target.value = ''; };
+$('pick-image').onchange = e => { if (e.target.files[0]) ocrImage(e.target.files[0]); e.target.value = ''; };
+
+// 끌어다 놓기 (파일·폴더 모두)
+function readEntry(entry, prefix) {
+  return new Promise(res => {
+    if (entry.isFile) return res([{ name: entry.name, path: prefix + entry.name }]);
+    const rd = entry.createReader(); let all = [];
+    const next = () => rd.readEntries(async list => {
+      if (!list.length) { const nested = await Promise.all(all.map(x => readEntry(x, prefix + entry.name + '/'))); return res(nested.flat()); }
+      all = all.concat(list); next();
+    }, () => res([]));
+    next();
+  });
+}
+const ta = $('input');
+ta.addEventListener('dragover', e => { if (mode !== 'file') return; e.preventDefault(); ta.classList.add('drop'); });
+ta.addEventListener('dragleave', () => ta.classList.remove('drop'));
+ta.addEventListener('drop', async e => {
+  if (mode !== 'file' || !e.dataTransfer.files.length) return;
+  e.preventDefault(); ta.classList.remove('drop');
+  const items = [...e.dataTransfer.items].map(i => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
+  const imgs = [...e.dataTransfer.files].filter(f => f.type.startsWith('image/'));
+  if (items.length === 1 && imgs.length === 1 && items[0].isFile) return ocrImage(imgs[0]);
+  if (items.length) loadEntries((await Promise.all(items.map(x => readEntry(x, '')))).flat());
+  else loadEntries([...e.dataTransfer.files].map(f => ({ name: f.name, path: f.name })));
+});
+
+// 캡처 붙여넣기 (Ctrl+V)
+document.addEventListener('paste', e => {
+  if (mode !== 'file' || location.hash.replace('#', '') && location.hash !== '#fix') return;
+  const img = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith('image/'));
+  if (!img) return;
+  e.preventDefault(); ocrImage(img.getAsFile());
+});
+
+// ---------- 캡처 글자 인식 (Tesseract.js, 처음 한 번 한국어 데이터를 내려받음) ----------
+let ocrWorker = null;
+function loadScript(src) { return new Promise((ok, no) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = no; document.head.appendChild(s); }); }
+function ocrMsg(t) { $('ocr-status').hidden = !t; $('ocr-status').textContent = t || ''; }
+
+async function prepImage(file) {
+  const bmp = await createImageBitmap(file);
+  const k = bmp.width < 1600 ? 2 : 1;
+  const c = document.createElement('canvas'); c.width = bmp.width * k; c.height = bmp.height * k;
+  const g = c.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(bmp, 0, 0, c.width, c.height);
+  const d = g.getImageData(0, 0, c.width, c.height), p = d.data;
+  let dark = 0;
+  for (let i = 0; i < p.length; i += 4) { const y = 0.299 * p[i] + 0.587 * p[i + 1] + 0.114 * p[i + 2]; p[i] = p[i + 1] = p[i + 2] = y; if (y < 128) dark++; }
+  if (dark > p.length / 8) for (let i = 0; i < p.length; i += 4) p[i] = p[i + 1] = p[i + 2] = 255 - p[i]; // 어두운 화면이면 반전
+  g.putImageData(d, 0, 0);
+  return c;
+}
+
+// 탐색기 캡처에서 파일 이름만 남기기
+function cleanOcr(text) {
+  let lines = text.split('\n').map(l => l.trim()).filter(Boolean).map(l => l
+    .replace(/^[^A-Za-z가-힣0-9(]+/, '')
+    .replace(/\s+\d{4}\s*[-.]\s*\d{1,2}\s*[-.]\s*\d{1,2}\.?\s*(오전|오후)?\s*\d{1,2}\s*:\s*\d{2}.*$/, '')
+    .replace(/\s+(Adobe|Acrobat|PDF\s*(파일|문서)|Microsoft|Chrome|Edge|한컴|한글\s*문서|HWP|파일\s*폴더).*$/i, '')
+    .replace(/\s+[\d,]+\s*KB\s*$/i, '')
+    .replace(/^([A-Za-z])\s*[-–—_~]\s*[lI|]\s*(?=[.\s])/, '$1-1')
+    .replace(/(?<![\d.])0{2}(?=[가-힣])/g, '○○')
+    .replace(/\s*\.\s*pdf\s*$/i, '')
+    .trim()).filter(Boolean);
+  const named = lines.filter(l => /^[A-Za-z]\s*[-–—_~.]\s*\d/.test(l));
+  return named.length ? named : lines.filter(l => !/^(이름|수정한 날짜|유형|크기)/.test(l));
+}
+
+async function ocrImage(file) {
+  try {
+    ocrMsg('글자 인식 준비 중입니다. 처음 한 번은 한국어 데이터를 내려받느라 30초쯤 걸릴 수 있습니다.');
+    if (!window.Tesseract) await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js');
+    if (!ocrWorker) ocrWorker = await Tesseract.createWorker('kor+eng', 1, {
+      logger: m => { if (m.status === 'recognizing text') ocrMsg(`글자 인식 중 ${Math.round(m.progress * 100)}%`); },
+    });
+    const canvas = await prepImage(file);
+    const { data } = await ocrWorker.recognize(canvas);
+    const lines = cleanOcr(data.text);
+    ocrMsg('');
+    if (!lines.length) return toast('글자를 찾지 못했습니다. 파일 이름 부분만 크게 캡처해 보세요');
+    folderWarns = [{ tag: '캡처', msg: '캡처에서 읽은 이름입니다. 글자 인식은 틀릴 수 있으니 <b>원래 파일 이름과 한 번 대조</b>해 주세요. 정확하게 하려면 [파일 선택]이나 [폴더 선택]을 쓰세요.' }];
+    addLines(lines);
+    toast(`캡처에서 ${lines.length}줄을 읽었습니다`);
+  } catch (err) {
+    ocrMsg(''); toast('글자 인식을 하지 못했습니다. 인터넷 연결을 확인하거나 [파일 선택]을 이용해 주세요');
+  }
+}
 
 // ---------- 정정 기록 ----------
 let hist = [];

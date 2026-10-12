@@ -132,3 +132,9 @@ tr.sug td.r { color: var(--warn-fg); }
 .out.clean .line.w { background: none; outline: none; border-left-color: transparent; padding-right: 4px; }
 .out.clean .line.w::after { display: none; }
 .out ins.sug, .lg.sug { font-weight: 800; text-decoration: underline; text-decoration-style: dashed; text-decoration-color: var(--warn-fg); text-underline-offset: 3px; }
+
+/* ---------- 파일 불러오기 ---------- */
+.loader { display: grid; gap: 8px; padding: 10px 12px; border: 2px dashed var(--line); border-radius: 6px; }
+.loader .muted { font-size: 14px; }
+.ocr-status { margin: 0; font-weight: 700; color: var(--navy); }
+textarea.drop { outline: 3px dashed var(--navy); outline-offset: 2px; }
