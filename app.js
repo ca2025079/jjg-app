@@ -66,8 +66,9 @@ function render() {
   const src = $('input').value;
   const r = correct(src, mode, extra, { suggest: useSug }); last = r;
   const a = src.split('\n'), au = r.auto.split('\n'), b = r.text.split('\n');
-  $('output').innerHTML = b.map((line, i) => lineHtml((a[i] || '').replace(/[ \t]+$/, ''), au[i] || '', line)).join('\n')
-    || '<span class="empty">입력하면 바로 정정됩니다.</span>';
+  const wl = {}; r.warns.forEach(w => { if (w.ln) wl[w.ln] = (wl[w.ln] || 0) + 1; });
+  $('output').innerHTML = src.trim() ? b.map((line, i) => `<div class="line${wl[i + 1] ? ' w' : ''}"${wl[i + 1] ? ` data-n="${wl[i + 1]}건"` : ''}>${lineHtml((a[i] || '').replace(/[ \t]+$/, ''), au[i] || '', line)}</div>`).join('')
+    : '<span class="empty">입력하면 바로 정정됩니다.</span>';
   const nSug = r.log.filter(x => x.sug).length;
   const len = r.text.replace(/\n/g, '').length;
   $('stats').innerHTML =
@@ -77,9 +78,11 @@ function render() {
     (mode === 'status' ? `<span class="stat ${len > 6000 ? 'over' : ''}">글자수 ${comma(len)} / 6,000자</span>` : '');
   const ws = r.warns.slice();
   if (mode === 'status' && len > 6000) ws.unshift({ msg: `<b>글자수 초과</b> · ${comma(len)}자입니다. 평가요소별 입력칸은 6,000자(띄어쓰기 포함)까지입니다.` });
-  $('warns').innerHTML = ws.length
-    ? ws.map(x => `<li>${x.ln ? `<b>${x.ln}줄</b> · ` : ''}${x.msg}</li>`).join('')
-    : '<li style="background:var(--ins-bg);color:var(--ins-fg);border-left-color:var(--ins-fg)">확인할 부분이 없습니다.</li>';
+  $('warns').innerHTML = ws.map(x => `<li>${x.ln ? `<span class="lnb">${x.ln}줄</span>` : '<span class="lnb">전체</span>'}${x.msg}</li>`).join('');
+  $('alert').classList.toggle('ok', !ws.length);
+  $('alert-count').textContent = ws.length;
+  $('alert').querySelector('h2').textContent = ws.length ? '확인 필요' : '확인할 부분이 없습니다';
+  $('alert').querySelector('.alert-sub').hidden = !ws.length;
   $('log').innerHTML = r.log.length
     ? r.log.map(x => `<tr class="${x.sug ? 'sug' : ''}"><td class="n">${x.ln}</td><td class="r">${esc(x.rule)}</td><td><span class="from">${vis(x.from)}</span></td><td><span class="to ${x.sug ? 'sug' : ''}">${vis(x.to) || '(삭제)'}</span></td></tr>`).join('')
     : '<tr><td colspan="4" class="empty">고칠 부분이 없습니다.</td></tr>';

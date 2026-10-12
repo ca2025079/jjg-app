@@ -114,3 +114,21 @@ del.lg { background: var(--del-bg); color: var(--del-fg); text-decoration: line-
 .out.clean ins.sug { box-shadow: none; background: none; color: inherit; }
 .to.sug { background: var(--warn-bg); color: var(--warn-fg); }
 tr.sug td.r { color: var(--warn-fg); }
+
+/* ---------- 확인 필요 강조 ---------- */
+.alert { border: 3px solid var(--warn-line); background: var(--warn-bg); color: var(--warn-fg); border-radius: 8px; padding: 14px 16px; display: grid; gap: 10px; }
+.alert.ok { border-color: var(--ins-fg); background: var(--ins-bg); color: var(--ins-fg); }
+.alert-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.alert-head h2 { margin: 0; font-size: 22px; font-weight: 900; }
+.alert-badge { min-width: 40px; height: 40px; padding: 0 10px; border-radius: 20px; display: inline-grid; place-items: center; background: var(--warn-fg); color: var(--warn-bg); font-size: 22px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.alert.ok .alert-badge { background: var(--ins-fg); color: var(--ins-bg); }
+.alert-sub { font-size: 15px; font-weight: 600; flex-basis: 100%; }
+.alert ul.warns li { background: var(--surface); color: var(--ink); border-left: 6px solid var(--warn-line); font-size: 17px; font-weight: 600; padding: 10px 14px; }
+.alert ul.warns li .lnb { display: inline-block; background: var(--warn-fg); color: var(--warn-bg); border-radius: 4px; padding: 0 8px; margin-right: 8px; font-weight: 800; }
+.alert.ok ul.warns { display: none; }
+.out .line { padding: 1px 4px; border-left: 4px solid transparent; min-height: 1.7em; }
+.out .line.w { background: var(--warn-bg); border-left-color: var(--warn-line); outline: 2px solid var(--warn-line); outline-offset: -2px; border-radius: 3px; position: relative; padding-right: 64px; }
+.out .line.w::after { content: "확인 " attr(data-n); position: absolute; right: 4px; top: 2px; font-size: 12px; font-weight: 800; background: var(--warn-fg); color: var(--warn-bg); padding: 0 6px; border-radius: 3px; }
+.out.clean .line.w { background: none; outline: none; border-left-color: transparent; padding-right: 4px; }
+.out.clean .line.w::after { display: none; }
+.out ins.sug, .lg.sug { font-weight: 800; text-decoration: underline; text-decoration-style: dashed; text-decoration-color: var(--warn-fg); text-underline-offset: 3px; }
