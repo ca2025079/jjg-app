@@ -64,6 +64,7 @@ function lineHtml(orig, auto, fin) {
 
 function render() {
   const src = $('input').value;
+  $('sample-note').hidden = src.trim() !== (SAMPLES[mode] || '').trim();
   const r = correct(src, mode, extra, { suggest: useSug }); last = r;
   const a = src.split('\n'), au = r.auto.split('\n'), b = r.text.split('\n');
   const wl = {}; r.warns.forEach(w => { if (w.ln) wl[w.ln] = (wl[w.ln] || 0) + 1; });
@@ -105,6 +106,7 @@ let typing;
 $('input').addEventListener('input', () => { clearTimeout(typing); typing = setTimeout(render, 120); });
 document.querySelectorAll('.mode').forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode)));
 $('btn-sample').onclick = () => { $('input').value = SAMPLES[mode]; render(); };
+$('btn-start').onclick = () => { folderWarns = []; $('input').value = ''; render(); $('input').focus(); };
 $('btn-clear').onclick = () => { folderWarns = []; $('input').value = ''; render(); $('input').focus(); };
 $('btn-apply').onclick = () => { $('input').value = last.text; render(); toast('입력칸에 반영했습니다'); };
 $('show-diff').onchange = e => $('output').classList.toggle('clean', !e.target.checked);

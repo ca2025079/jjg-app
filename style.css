@@ -138,3 +138,8 @@ tr.sug td.r { color: var(--warn-fg); }
 .loader .muted { font-size: 14px; }
 .ocr-status { margin: 0; font-weight: 700; color: var(--navy); }
 textarea.drop { outline: 3px dashed var(--navy); outline-offset: 2px; }
+
+/* ---------- 예시 안내 ---------- */
+.sample-note { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; padding: 10px 12px; border-radius: 6px; background: var(--navy); color: var(--navy-ink); font-size: 15px; font-weight: 600; }
+.sample-note b { font-weight: 900; font-size: 16px; }
+.sample-note .b.primary { background: var(--navy-ink); color: var(--navy); border-color: var(--navy-ink); }
