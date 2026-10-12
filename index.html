@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>자체평가 표기 정정기</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@700;900&family=IBM+Plex+Sans+KR:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <header>
+      <h1>자체평가 표기 정정기</h1>
+      <p class="sub">기관평가인증 편람 p.30~33, p.37 기준 · 청암대학교 통일안 (문서번호 "호" 없음, 마스킹 ○)</p>
+    </header>
+    <span class="conn" id="conn">학교 사전 연결 확인 중</span>
+  </div>
+
+  <nav class="tabs" aria-label="화면">
+    <a href="#fix" id="nav-fix">정정하기</a>
+    <a href="#history" id="nav-history">정정 기록</a>
+    <a href="#admin" id="nav-admin">학교 사전·규칙</a>
+  </nav>
+
+  <!-- ===== 정정하기 ===== -->
+  <section id="view-fix" class="wrap" style="padding:0">
+    <div class="modes" role="group" aria-label="작성 항목">
+      <button class="mode" data-mode="list" aria-pressed="true">입증자료 목록</button>
+      <button class="mode" data-mode="status" aria-pressed="false">현황 및 분석결과</button>
+      <button class="mode" data-mode="file" aria-pressed="false">증빙파일명</button>
+    </div>
+    <p class="hint" id="hint"></p>
+    <div class="stats" id="stats"></div>
+
+    <div class="panes">
+      <div class="pane">
+        <div class="pane-head">
+          <h2>입력</h2>
+          <div class="btns">
+            <button class="b" id="btn-sample">예시 넣기</button>
+            <button class="b" id="btn-clear">지우기</button>
+          </div>
+        </div>
+        <textarea id="input" spellcheck="false" aria-label="정정할 문장"></textarea>
+      </div>
+      <div class="pane">
+        <div class="pane-head">
+          <h2>정정 결과</h2>
+          <div class="btns">
+            <label class="tog"><input type="checkbox" id="show-diff" checked> 바뀐 곳 표시</label>
+            <button class="b" id="btn-apply">입력칸에 반영</button>
+            <button class="b primary" id="btn-copy">결과 복사</button>
+          </div>
+        </div>
+        <div class="out" id="output" aria-live="polite"></div>
+        <div class="row">
+          <label class="field" style="flex:1"><span>작성자(부서·이름)</span><input type="text" id="author" placeholder="예: 기획처 이민주"></label>
+          <button class="b" id="btn-save" style="align-self:end">기록 저장</button>
+        </div>
+      </div>
+    </div>
+
+    <section class="card">
+      <h2>확인 필요 <span class="hint" style="display:inline">(자동으로 고칠 수 없어 직접 보셔야 하는 부분)</span></h2>
+      <ul class="warns" id="warns"></ul>
+    </section>
+
+    <section class="card">
+      <h2>자동 수정 내역</h2>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>줄</th><th>규칙</th><th>원래</th><th>수정</th></tr></thead>
+        <tbody id="log"></tbody>
+      </table></div>
+    </section>
+  </section>
+
+  <!-- ===== 정정 기록 ===== -->
+  <section id="view-history" class="card" hidden>
+    <div class="pane-head">
+      <h2>정정 기록 <span class="hint" style="display:inline">(최근 100건)</span></h2>
+      <div class="row">
+        <select id="hist-mode" aria-label="항목 거르기">
+          <option value="">전체 항목</option>
+          <option value="list">입증자료 목록</option>
+          <option value="status">현황 및 분석결과</option>
+          <option value="file">증빙파일명</option>
+        </select>
+        <input type="text" id="hist-q" placeholder="작성자·내용 검색" aria-label="검색">
+        <button class="b" id="btn-hist-reload">새로고침</button>
+      </div>
+    </div>
+    <div id="hist-list"><p class="muted">불러오는 중입니다.</p></div>
+  </section>
+
+  <!-- ===== 학교 사전·규칙 ===== -->
+  <section id="view-admin" hidden style="display:grid;gap:18px">
+    <section class="card">
+      <h2>관리자 확인</h2>
+      <p class="muted">사전과 규칙은 누구나 볼 수 있고, 추가·수정·삭제는 관리자 비밀번호가 있어야 합니다.</p>
+      <div class="row" id="lock-row">
+        <input type="password" id="admin-pw" placeholder="관리자 비밀번호" aria-label="관리자 비밀번호">
+        <button class="b primary" id="btn-unlock">확인</button>
+      </div>
+      <p class="muted" id="lock-msg"></p>
+    </section>
+
+    <section class="card">
+      <h2>학교 표기 사전</h2>
+      <p class="muted">틀리기 쉬운 표기를 학교 공식 명칭으로 바꿉니다. 세 탭 모두에 가장 먼저 적용됩니다. 예: <code class="k">교육과정 운영지침</code> → <code class="k">교육과정운영지침</code></p>
+      <div class="form admin-only">
+        <label class="field"><span>구분</span>
+          <select id="t-kind"><option>규정명</option><option>부서명</option><option>위원회명</option><option>용어</option></select></label>
+        <label class="field"><span>틀린 표기</span><input type="text" id="t-wrong"></label>
+        <label class="field"><span>바른 표기</span><input type="text" id="t-correct"></label>
+        <label class="field"><span>메모(선택)</span><input type="text" id="t-note"></label>
+        <button class="b primary" id="btn-add-term">사전에 추가</button>
+      </div>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>구분</th><th>틀린 표기</th><th>바른 표기</th><th>메모</th><th class="admin-only"></th></tr></thead>
+        <tbody id="term-list"></tbody>
+      </table></div>
+    </section>
+
+    <section class="card">
+      <h2>추가 규칙</h2>
+      <p class="muted"><b>고치기</b>는 찾은 말을 바꿀 말로 바꾸고, <b>알려주기</b>는 고치지 않고 '확인 필요'에 안내 문구를 띄웁니다.</p>
+      <div class="form admin-only">
+        <label class="field"><span>규칙 이름</span><input type="text" id="r-name" placeholder="예: 학과명 통일"></label>
+        <label class="field"><span>적용 탭</span>
+          <select id="r-mode"><option value="all">전체</option><option value="list">입증자료 목록</option><option value="status">현황 및 분석결과</option><option value="file">증빙파일명</option></select></label>
+        <label class="field"><span>종류</span>
+          <select id="r-kind"><option value="fix">고치기</option><option value="warn">알려주기</option></select></label>
+        <label class="field"><span>찾을 말</span><input type="text" id="r-find"></label>
+        <label class="field" id="r-replace-wrap"><span>바꿀 말</span><input type="text" id="r-replace"></label>
+        <label class="field" id="r-message-wrap" hidden><span>안내 문구</span><input type="text" id="r-message" placeholder="예: 학과명은 학칙 별표 기준으로 씁니다"></label>
+        <label class="tog"><input type="checkbox" id="r-regex"> 정규식으로 찾기</label>
+        <button class="b primary" id="btn-add-rule">규칙 추가</button>
+      </div>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>이름</th><th>탭</th><th>종류</th><th>찾을 말</th><th>바꿀 말·안내</th><th>사용</th><th class="admin-only"></th></tr></thead>
+        <tbody id="rule-list"></tbody>
+      </table></div>
+    </section>
+  </section>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="rules.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

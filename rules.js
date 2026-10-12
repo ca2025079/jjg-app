@@ -1,0 +1,225 @@
+
+// 자체평가 표기 정정기 - 정정 규칙 (편람 p.30~33, p.37 + 청암대학교 통일안)
+// ---------- 정정 규칙 ----------
+const pad = n => String(n).padStart(2, '0');
+const comma = n => n.toLocaleString('en-US');
+
+const COMMON = [
+  ['기호 통일', /[｢｣∼～]/g, m => ({'｢':'「','｣':'」','∼':'~','～':'~'}[m])],
+  ['마스킹 ○ 통일', /ㅇ|◯|〇/g, () => '○'],
+  ['마스킹 ○ 통일', /(?<![A-Za-z])[OＯ]{1,2}(?=[가-힣])/g, m => '○'.repeat(m.length)],
+  ['마스킹 ○ 통일', /(?<=[가-힣])\*{1,2}(?=[가-힣\s,()]|$)/g, m => '○'.repeat(m.length)],
+  ['문서번호 "호" 삭제', /([가-힣]+)-(\d+)호(?=[\s,)]|$)/g, (m, a, b) => `${a}-${b}`],
+  ['날짜 형식', /(?<![\d.])(\d{4})[ \t]*[.\-/][ \t]*(\d{1,2})[ \t]*[.\-/][ \t]*(\d{1,2})(?!\d)\.?/g,
+    (m, y, mo, d) => (+mo >= 1 && +mo <= 12 && +d >= 1 && +d <= 31) ? `${y}.${pad(mo)}.${pad(d)}.` : m],
+  ['날짜 형식', /(?<![\d.])(\d{4})\.[ \t]*(\d{1,2})[ \t]*월/g, (m, y, mo) => `${y}.${pad(mo)}.`],
+  ['물결표 띄어쓰기', /(?<=[\d.])[ \t]*~[ \t]*(?=[\d현])/g, () => '~'],
+  ['학년도·학기 표기', /(\d{4})[ \t]*(학년도|년도|년)?[ \t]*[-–.]?[ \t]*([1-4])[ \t]*학기/g, (m, y, _u, s) => `${y}학년도 ${s}학기`],
+  ['페이지 표기', /(?<![A-Za-z])pp?\.[ \t]*(\d+)(?:[ \t]*[~\-][ \t]*(\d+))?/g, (m, a, b) => b ? `${a}~${b}페이지` : `${a}페이지`],
+  ['페이지 표기', /(\d+)[ \t]*[~\-][ \t]*(\d+)[ \t]*(?:페이지|쪽(?!수)|p(?![A-Za-z]))/g, (m, a, b) => `${a}~${b}페이지`],
+  ['페이지 표기', /(\d+)[ \t]*(?:페이지|쪽(?!수)|p(?![A-Za-z]))/g, (m, a) => `${a}페이지`],
+  ['비율 소수 첫째자리', /(?<![\d.])(\d+(?:\.\d+)?)[ \t]*%/g, (m, n) => (Math.round(parseFloat(n) * 10 + 1e-7) / 10).toFixed(1) + '%'],
+  ['금액 천원 단위', /(?<![\d,.])(\d{1,3}(?:,\d{3})+|\d{4,})[ \t]*원(?!장|칙|생)/g, (m, n) => {
+    const v = parseInt(n.replace(/,/g, ''), 10); return v >= 1000 ? comma(Math.round(v / 1000)) + '천원' : m; }],
+  ['정량지표 표기', /\)[ \t]*[x×X*][ \t]*100(?!\d)[ \t]*=?[ \t]*/g, m => /=/.test(m) ? ')×100=' : ')×100'],
+  ['정량지표 표기', /(률|율)[ \t]*=[ \t]*\(/g, (m, a) => `${a}=(`],
+  ['정량지표 표기', /(\d[가-힣]{0,2})[ \t]+\/[ \t]*(?=\d)|(\d[가-힣]{0,2})\/[ \t]+(?=\d)/g, (m, a, b) => (a || b) + '/'],
+  ['괄호 표기', /[\[(（][ \t]*정보[ \t]*공시[ \t]*[\])）][ \t]*/g, () => '(정보공시) '],
+  ['괄호 표기', /[\[(（][ \t]*현장[ \t]*비치[ \t]*[\])）][ \t]*/g, () => '(현장비치) '],
+  ['「」 뒤 띄어쓰기', /」(?=제\d)/g, () => '」 '],
+  ['괄호 뒤 쉼표 삭제', /\)[ \t]*,[ \t]*(?=제\d+조|\d+(?:~\d+)?페이지)/g, () => ') '],
+  ['괄호 뒤 띄어쓰기', /\)(?=제\d+조|\d+(?:~\d+)?페이지)/g, () => ') '],
+  ['판정 표기', /[<〈《＜][ \t]*(조건부충족|미충족|충족)[ \t]*[>〉》＞]/g, (m, a) => `〈${a}〉`],
+  ['판정 표기', /(?<![〈가-힣])(조건부충족|미충족|충족)(?=[ \t]*판정)/g, (m, a) => `〈${a}〉`],
+  ['오타', /의 따라/g, () => '에 따라'],
+  ['오타', /위원회 에서/g, () => '위원회에서'],
+];
+
+const LIST_NO = ['목록 번호 형식', /^[ \t]*([A-Za-z])[ \t]*[-–—_][ \t]*(\d+)[ \t]*[.)]?[ \t]*/, (m, l, n) => `${l.toLowerCase()}-${n}. `];
+const MODE = {
+  list: [
+    LIST_NO,
+    ['판단항목 제목 형식', /^[ \t]*([A-Za-z])[ \t]*[.)][ \t]*(?=[^\d\s])/, (m, l) => `${l.toLowerCase()}) `],
+    ['정보공시 괄호', /^([a-z]-\d+\. )정보공시[ \t]*/, (m, a) => `${a}(정보공시) `],
+    ['끝 마침표 삭제', /(?<=[가-힣)\]])\.[ \t]*$/, () => ''],
+  ],
+  status: [
+    ['문단 시작 형식', /^[ \t]*(?:[-–—•·▪■][ \t]*)?\([ \t]*(\d{4})[ \t]*(?:학년도|년도|년)?[ \t]*\)[ \t]*/, (m, y) => `- (${y}학년도) `],
+    ['문단 시작 형식', /^[ \t]*[–—•·▪■][ \t]*/, () => '- '],
+    ['입증자료 표시', /[ \t]*\([ \t]*입증[ \t]*자료[ \t]*[:：]?[ \t]*([^)]*)\)/g, (m, inner) => {
+      let s = inner.trim()
+        .replace(/([A-Za-z])[ \t]*-[ \t]*(\d+)[ \t]*[,.]?[ \t]*(?=\d+(?:~\d+)?페이지)/g, (x, l, n) => `${l.toLowerCase()}-${n}. `)
+        .replace(/([A-Za-z])[ \t]*-[ \t]*(\d+)/g, (x, l, n) => `${l.toLowerCase()}-${n}`)
+        .replace(/[ \t]*,[ \t]*/g, ', ');
+      return `(입증자료 ${s})`;
+    }],
+    ['끝 마침표 삭제', /(?<=[가-힣)])\.[ \t]*$/, () => ''],
+  ],
+  file: [
+    LIST_NO,
+    ['파일명 금지문자 변경', /(?<=[가-힣A-Za-z0-9])\/(?=[가-힣A-Za-z0-9])/g, () => '·'],
+    ['.pdf 빼기 (저장 시 자동으로 붙음)', /(?:[ \t]*\.pdf)+[ \t]*$/i, () => ''],
+  ],
+};
+const TAIL = [['중복 띄어쓰기', /(?<=\S)[ \t]{2,}(?=\S)/g, () => ' ']];
+
+function applyRules(line, rules, log, ln) {
+  for (const [rule, re, fn] of rules) {
+    line = line.replace(re, (...args) => {
+      const m = args[0];
+      const out = fn(...args);
+      if (out !== m) log.push({ ln, rule, from: m, to: out });
+      return out;
+    });
+  }
+  return line;
+}
+
+const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// 학교 사전(terms)과 사용자 규칙(custom_rules)을 정정 규칙 배열로 바꿈
+function buildExtra(extra, mode) {
+  const pre = [], post = [], warns = [];
+  (extra.terms || []).forEach(t => {
+    if (!t.wrong || t.wrong === t.correct) return;
+    pre.push([`학교 사전(${t.kind || '표기'})`, new RegExp(reEsc(t.wrong), 'g'), () => t.correct]);
+  });
+  (extra.rules || []).forEach(r => {
+    if (r.active === false || !r.find) return;
+    if (r.mode && r.mode !== 'all' && r.mode !== mode) return;
+    let re;
+    try { re = new RegExp(r.is_regex ? r.find : reEsc(r.find), 'g'); } catch (err) { return; }
+    if (r.kind === 'warn') warns.push({ re, msg: r.message || r.name, name: r.name });
+    else post.push([`추가 규칙: ${r.name}`, re, (...a) => r.is_regex
+      ? a[0].replace(new RegExp(r.find), r.replace || '') : (r.replace || '')]);
+  });
+  return { pre, post, warns };
+}
+
+function correct(text, mode, extra = {}) {
+  const log = [];
+  const x = buildExtra(extra, mode);
+  const lines = text.split('\n').map((raw, i) => {
+    if (!raw.trim()) return '';
+    let s = applyRules(raw, x.pre, log, i + 1);
+    s = applyRules(s, COMMON, log, i + 1);
+    s = applyRules(s, MODE[mode], log, i + 1);
+    s = applyRules(s, x.post, log, i + 1);
+    s = applyRules(s, TAIL, log, i + 1);
+    s = s.replace(/[ \t]+$/, '');
+    return s;
+  });
+  const warns = check(lines, mode);
+  lines.forEach((s, i) => x.warns.forEach(w => {
+    w.re.lastIndex = 0; const m = s.match(w.re);
+    if (m) warns.push({ ln: i + 1, msg: `${esc(w.msg)} (<b>${esc(m[0])}</b>)` });
+  }));
+  return { text: lines.join('\n'), log, warns };
+}
+
+// ---------- 확인 필요(경고) ----------
+function check(lines, mode) {
+  const w = [];
+  const add = (ln, msg) => w.push({ ln, msg });
+  if (mode === 'list' || mode === 'file') {
+    const seen = {}; let head = null;
+    lines.forEach((s, i) => {
+      if (!s) return;
+      const h = s.match(/^([a-z])\) /);
+      if (h) { head = h[1]; if (mode === 'list') return; }
+      const it = s.match(/^([a-z])-(\d+)\. /);
+      if (!it) { if (!h) add(i + 1, '번호 형식(<b>a-1.</b> 또는 <b>a)</b>)으로 시작하지 않습니다.'); return; }
+      if (head && it[1] !== head) add(i + 1, `<b>${head})</b> 판단항목 아래에 <b>${it[1]}-${it[2]}</b> 번호가 있습니다. 알파벳을 맞춰 주세요.`);
+      (seen[it[1]] = seen[it[1]] || []).push(+it[2]);
+      const ip = s.match(/\(정보공시\) (\S+)/);
+      if (ip && !/\.$/.test(ip[1])) add(i + 1, `정보공시 목차번호 <b>${ip[1]}</b>가 「대학정보공시 지침서」 목차 표기와 같은지 확인해 주세요. (예: 12-카-2.)`);
+      if (mode === 'file') {
+        if (/\(현장비치\)/.test(s)) add(i + 1, '<b>(현장비치)</b> 자료는 파일을 올리지 않습니다. 목록에만 적고 원본은 평가장에 비치합니다.');
+        const bad = s.match(/[\\/:*?"<>|]/g);
+        if (bad) add(i + 1, `파일명에 쓸 수 없는 문자 <b>${[...new Set(bad)].join(' ')}</b>가 있습니다. 목록 문구에서도 빼 주세요.`);
+        if (s.length > 120) add(i + 1, `파일명이 ${s.length}자로 깁니다. 폴더 경로까지 합치면 Windows에서 오류가 날 수 있어 줄이는 것이 좋습니다.`);
+      }
+    });
+    for (const [l, ns] of Object.entries(seen)) {
+      const max = Math.max(...ns);
+      const miss = []; for (let k = 1; k <= max; k++) if (!ns.includes(k)) miss.push(`${l}-${k}`);
+      const dup = ns.filter((n, i) => ns.indexOf(n) !== i);
+      if (miss.length) add(null, `번호가 빠졌습니다: <b>${miss.join(', ')}</b> (1부터 빠짐없이)`);
+      if (dup.length) add(null, `번호가 중복됩니다: <b>${[...new Set(dup)].map(n => `${l}-${n}`).join(', ')}</b>`);
+    }
+  }
+  if (mode === 'status') {
+    const vague = ['충분히', '매우', '상당히', '대체로', '크게', '높은 수준', '우수한 수준', '것으로 보임', '것으로 사료', '브로드', '시나브로'];
+    let verdicts = []; let lastIdx = -1;
+    lines.forEach((s, i) => {
+      if (!s) return; lastIdx = i;
+      const end = s.match(/(습니다|입니다|하였다|했다|한다|이다)(?=[\s.(]|$)/);
+      if (end) add(i + 1, `<b>~${end[1]}</b> → 개조식 종결어미(<b>~함, ~됨, ~있음</b>)로 바꿔 주세요.`);
+      vague.forEach(v => { if (s.includes(v)) add(i + 1, `모호·과장 표현 <b>${v}</b> → 수치나 사실로 바꿔 주세요. (예: 만족도가 90.0%로 나타남)`); });
+      if (/판정/.test(s)) verdicts.push(i);
+      if (/^- \(\d{4}학년도\)/.test(s) && !/\(입증자료 [^)]+\)/.test(s) && !(lines[i + 1] || '').match(/\(입증자료/))
+        add(i + 1, '문단 끝에 <b>(입증자료 a-1. 00페이지)</b> 표시가 없습니다.');
+      if (/[가-힣]\.\s+[가-힣]/.test(s)) add(i + 1, '문장 중간에 마침표가 있습니다. 개조식은 마침표 없이 끝냅니다.');
+      if (/\(\d{4}년\)|\d{4}년도(?!\s*\d)/.test(s)) add(i + 1, '연도는 <b>○○○○학년도</b>로 씁니다. (회계연도라면 그대로)');
+    });
+    if (lines.some(Boolean)) {
+      if (!verdicts.length) add(null, '판정 문장이 없습니다. 마지막 줄에 <b>이상의 근거로 〈충족〉 판정함</b>을 넣어 주세요.');
+      else {
+        if (verdicts.length > 1) add(null, '판정 문장이 여러 번 있습니다. a, b, c를 종합해 <b>마지막 줄에 한 번만</b> 씁니다.');
+        if (verdicts[verdicts.length - 1] !== lastIdx) add(null, '판정 문장은 <b>맨 마지막 줄</b>에 둡니다.');
+        const v = lines[verdicts[verdicts.length - 1]];
+        if (/〈(조건부충족|미충족)〉/.test(v) && !/(없어|미흡|부족|않아|못해)/.test(v)) add(null, '조건부충족·미충족이면 <b>원인</b>을 함께 씁니다. (예: 2025학년도에 ~실적이 없어 〈미충족〉 판정함)');
+      }
+    }
+  }
+  return w;
+}
+
+// ---------- 글자 단위 비교 ----------
+function diff(a, b) {
+  const n = a.length, m = b.length;
+  const dp = Array.from({ length: n + 1 }, () => new Int32Array(m + 1));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--)
+    dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+  const ops = []; let i = 0, j = 0;
+  const push = (t, c) => { const l = ops[ops.length - 1]; if (l && l.t === t) l.s += c; else ops.push({ t, s: c }); };
+  while (i < n && j < m) {
+    if (a[i] === b[j]) { push('=', a[i]); i++; j++; }
+    else if (dp[i + 1][j] >= dp[i][j + 1]) { push('-', a[i]); i++; }
+    else { push('+', b[j]); j++; }
+  }
+  while (i < n) push('-', a[i++]);
+  while (j < m) push('+', b[j++]);
+  return ops;
+}
+const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const vis = s => esc(s).replace(/ /g, '<span style="opacity:.5">·</span>');
+
+// ---------- 예시 ----------
+const SAMPLES = {
+  list: `a) 전공 교육과정 개발(개편) 관련 규정 준수 확인.
+a-1 학칙(개정 2025.2.19.),제22조
+A-2. 교육과정운영지침(개정 2021-04-20) 제1조.
+b) 전공 교육과정 개발(개편) 관련 내·외부환경 분석 및 의견수렴 확인
+b-1. 제21차 ㅇㅇ위원회 회의록(기획처-29호, 2022.7.10.), 9 쪽
+b-3. [현장 비치] OO학과 전공 교육과정 개발 보고서
+c) 전공 교육과정 개발(개편) 실적 확인
+c-1. 정보공시 12-카-2. 캡스톤 디자인 운영 현황`,
+  status: `b) ~ 추진체계 확인
+• (2024년도) 대학은 ｢직제규정｣제12조(대학본부)에 따라 OO처 산하 OO운영팀을 두고, 「사무분장 규정」 제12조(○○처) 제2항의 따라 업무를 수행하고 있음 (입증자료 B-3, 10 ~ 14페이지).
+- (2025학년도) 2025년-1학기 강의만족도는 매우 높은 87.25%로 나타났습니다(입증자료: b-5)
+- (2025학년도) 상담사 안ㅇ헌(업무기간 2024.3.1.~ 2026.4월 현재)이 상담 업무를 수행함(입증자료 b-6. 3p)
+- (2025학년도) 취업률 = (80명 / 100명) x 100 = 80%이며, 교육비 124,445,678원을 집행함(입증자료 b-7)
+이상의 근거로 충족 판정함.`,
+  file: `a-1. 학칙(개정 2025.02.19.),제22조.pdf
+a-2. 제32차 OO위원회 회의결과 보고(기획처-5호, 2025.07.10.), 10페이지.PDF
+a-4. (정보공시)12-카-2. 캡스톤 디자인 운영 현황 .pdf
+b-1. 산학/취업 협력 실적
+b-2. (현장비치) 2024학년도 직원 근무평정 결과 보고`,
+};
+const HINTS = {
+  list: '「평가인증시스템」 입증자료 칸에 쓸 목록을 한 줄에 하나씩 넣으세요. 판단항목 제목(a) …)도 함께 넣으면 번호 검사까지 합니다.',
+  status: '「현황 및 분석결과」 칸에 쓸 내용을 넣으세요. 한 문단이 한 줄입니다. 글자수 6,000자 제한도 함께 셉니다.',
+  file: '업로드할 파일 이름을 한 줄에 하나씩 넣으세요. 목록 문구와 같은 규칙으로 고칩니다. .pdf는 PDF로 저장할 때 자동으로 붙으므로 결과에서는 뺍니다. 결과를 저장 창의 파일 이름 칸에 그대로 붙여 넣으세요.',
+};
+
