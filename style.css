@@ -140,6 +140,10 @@ tr.sug td.r { color: var(--warn-fg); }
 textarea.drop { outline: 3px dashed var(--navy); outline-offset: 2px; }
 
 /* ---------- 예시 안내 ---------- */
-.sample-note { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; padding: 10px 12px; border-radius: 6px; background: var(--navy); color: var(--navy-ink); font-size: 15px; font-weight: 600; }
-.sample-note b { font-weight: 900; font-size: 16px; }
-.sample-note .b.primary { background: var(--navy-ink); color: var(--navy); border-color: var(--navy-ink); }
+.sample-note { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 8px 12px; border: 1px solid var(--line); border-bottom: none; border-radius: 6px 6px 0 0; background: var(--chip); font-size: 15px; margin-bottom: -10px; }
+.sample-note + textarea { border-top-left-radius: 0; border-top-right-radius: 0; border-style: dashed; color: var(--muted); }
+.sample-tag { font-size: 13px; font-weight: 800; letter-spacing: 1px; padding: 2px 10px; border-radius: 999px; background: var(--navy); color: var(--navy-ink); }
+.sample-text { color: var(--muted); font-weight: 600; flex: 1 1 220px; }
+.sample-btn { font: inherit; font-size: 15px; font-weight: 800; color: var(--navy); background: none; border: none; padding: 2px 0; cursor: pointer; text-decoration: underline; text-underline-offset: 4px; text-decoration-thickness: 2px; }
+.sample-btn:hover { text-decoration-color: var(--warn-line); }
+.sample-btn:focus-visible { outline: 3px solid var(--warn-line); outline-offset: 2px; border-radius: 2px; }
