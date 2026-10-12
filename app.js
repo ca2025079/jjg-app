@@ -41,17 +41,39 @@ let mode = store.get('jjg-mode', 'list');
 const drafts = Object.assign({ ...SAMPLES }, store.get('jjg-drafts', {}));
 let last = { text: '', log: [], warns: [] };
 
+let useSug = store.get('jjg-sug', true);
+
+// 줄별로 원문→최종 비교, 그중 '제안' 단계에서 들어간 글자는 노란색
+function lineHtml(orig, auto, fin) {
+  const sugIdx = new Set(); let j = 0;
+  if (auto !== fin) for (const o of diff(auto, fin)) {
+    if (o.t === '-') continue;
+    for (let k = 0; k < o.s.length; k++, j++) if (o.t === '+') sugIdx.add(j);
+  }
+  let out = ''; j = 0;
+  for (const o of diff(orig, fin)) {
+    if (o.t === '-') { out += `<del>${esc(o.s)}</del>`; continue; }
+    if (o.t === '=') { out += esc(o.s); j += o.s.length; continue; }
+    let buf = '', cur = null;
+    const flush = () => { if (buf) out += `<ins${cur ? ' class="sug"' : ''}>${esc(buf)}</ins>`; buf = ''; };
+    for (const ch of o.s) { const sg = sugIdx.has(j++); if (sg !== cur) { flush(); cur = sg; } buf += ch; }
+    flush();
+  }
+  return out;
+}
+
 function render() {
   const src = $('input').value;
-  const r = correct(src, mode, extra); last = r;
-  const a = src.split('\n'), b = r.text.split('\n');
-  $('output').innerHTML = b.map((line, i) => diff((a[i] || '').replace(/[ \t]+$/, ''), line)
-    .map(o => o.t === '=' ? esc(o.s) : o.t === '+' ? `<ins>${esc(o.s)}</ins>` : `<del>${esc(o.s)}</del>`).join('')).join('\n')
+  const r = correct(src, mode, extra, { suggest: useSug }); last = r;
+  const a = src.split('\n'), au = r.auto.split('\n'), b = r.text.split('\n');
+  $('output').innerHTML = b.map((line, i) => lineHtml((a[i] || '').replace(/[ \t]+$/, ''), au[i] || '', line)).join('\n')
     || '<span class="empty">입력하면 바로 정정됩니다.</span>';
+  const nSug = r.log.filter(x => x.sug).length;
   const len = r.text.replace(/\n/g, '').length;
   $('stats').innerHTML =
-    `<span class="stat ok">자동 수정 ${r.log.length}건</span>` +
-    `<span class="stat ${r.warns.length ? 'warn' : 'ok'}">확인 필요 ${r.warns.length}건</span>` +
+    `<span class="stat ok">자동 수정 ${r.log.length - nSug}건</span>` +
+    (useSug ? `<span class="stat warn">제안 반영 ${nSug}건</span>` : '') +
+    `<span class="stat ${r.warns.length ? 'warn' : 'ok'}">${useSug ? '남은 ' : ''}확인 필요 ${r.warns.length}건</span>` +
     (mode === 'status' ? `<span class="stat ${len > 6000 ? 'over' : ''}">글자수 ${comma(len)} / 6,000자</span>` : '');
   const ws = r.warns.slice();
   if (mode === 'status' && len > 6000) ws.unshift({ msg: `<b>글자수 초과</b> · ${comma(len)}자입니다. 평가요소별 입력칸은 6,000자(띄어쓰기 포함)까지입니다.` });
@@ -59,7 +81,7 @@ function render() {
     ? ws.map(x => `<li>${x.ln ? `<b>${x.ln}줄</b> · ` : ''}${x.msg}</li>`).join('')
     : '<li style="background:var(--ins-bg);color:var(--ins-fg);border-left-color:var(--ins-fg)">확인할 부분이 없습니다.</li>';
   $('log').innerHTML = r.log.length
-    ? r.log.map(x => `<tr><td class="n">${x.ln}</td><td class="r">${esc(x.rule)}</td><td><span class="from">${vis(x.from)}</span></td><td><span class="to">${vis(x.to) || '(삭제)'}</span></td></tr>`).join('')
+    ? r.log.map(x => `<tr class="${x.sug ? 'sug' : ''}"><td class="n">${x.ln}</td><td class="r">${esc(x.rule)}</td><td><span class="from">${vis(x.from)}</span></td><td><span class="to ${x.sug ? 'sug' : ''}">${vis(x.to) || '(삭제)'}</span></td></tr>`).join('')
     : '<tr><td colspan="4" class="empty">고칠 부분이 없습니다.</td></tr>';
   drafts[mode] = src; store.set('jjg-drafts', drafts);
 }
@@ -79,6 +101,8 @@ $('btn-sample').onclick = () => { $('input').value = SAMPLES[mode]; render(); };
 $('btn-clear').onclick = () => { $('input').value = ''; render(); $('input').focus(); };
 $('btn-apply').onclick = () => { $('input').value = last.text; render(); toast('입력칸에 반영했습니다'); };
 $('show-diff').onchange = e => $('output').classList.toggle('clean', !e.target.checked);
+$('use-sug').checked = useSug;
+$('use-sug').onchange = e => { useSug = e.target.checked; store.set('jjg-sug', useSug); render(); };
 $('btn-copy').onclick = () => {
   const fallback = () => {
     $('output').classList.add('clean'); $('show-diff').checked = false;

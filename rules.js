@@ -35,11 +35,11 @@ const COMMON = [
   ['오타', /위원회 에서/g, () => '위원회에서'],
 ];
 
-const LIST_NO = ['목록 번호 형식', /^[ \t]*([A-Za-z])[ \t]*[-–—_][ \t]*(\d+)[ \t]*[.)]?[ \t]*/, (m, l, n) => `${l.toLowerCase()}-${n}. `];
+const LIST_NO = ['목록 번호 형식', /^[ \t]*([A-Za-z])[ \t]*[-–—_/][ \t]*(\d+)[ \t]*[.):]?[ \t]*/, (m, l, n) => `${l.toLowerCase()}-${n}. `];
 const MODE = {
   list: [
     LIST_NO,
-    ['판단항목 제목 형식', /^[ \t]*([A-Za-z])[ \t]*[.)][ \t]*(?=[^\d\s])/, (m, l) => `${l.toLowerCase()}) `],
+    ['판단항목 제목 형식', /^[ \t]*([A-Za-z])[ \t]*[.)/:\]][ \t]*(?=[^\d\s])/, (m, l) => `${l.toLowerCase()}) `],
     ['정보공시 괄호', /^([a-z]-\d+\. )정보공시[ \t]*/, (m, a) => `${a}(정보공시) `],
     ['끝 마침표 삭제', /(?<=[가-힣)\]])\.[ \t]*$/, () => ''],
   ],
@@ -96,25 +96,58 @@ function buildExtra(extra, mode) {
   return { pre, post, warns };
 }
 
-function correct(text, mode, extra = {}) {
+// ---------- 제안(확인 필요 항목 중 고칠 방법이 분명한 것) ----------
+const SUGGEST = {
+  status: [
+    ['제안: 개조식 종결어미', /(하였습니다|했습니다|합니다|하였다|했다|한다|되었습니다|됐습니다|됩니다|되었다|됐다|된다|있었습니다|있습니다|있다|없었습니다|없습니다|없다|나타났습니다|나타납니다|나타났다|보였습니다|보였다|입니다|이다)(?=[\s.,(]|$)/g,
+      (m) => /^(하였|했|합|한)/.test(m) ? '함' : /^(되었|됐|됩|된)/.test(m) ? '됨' : /^있/.test(m) ? '있음'
+        : /^없/.test(m) ? '없음' : /^나타/.test(m) ? '나타남' : /^보였/.test(m) ? '보임' : '임'],
+    ['제안: 개조식 종결어미', /([높낮많적좋])(았|었)(습니다|다)(?=[\s.,(]|$)/g, (m, a) => `${a}음`],
+    ['제안: 모호 표현 삭제', /(충분히|매우|상당히|대체로|크게)[ \t]+/g, () => ''],
+    ['제안: 학년도 표기', /(\d{4})년도(?![ \t]*\d)/g, (m, y) => `${y}학년도`],
+    ['제안: 문장 중간 마침표', /(?<=[함됨음임])\.[ \t]+(?=[가-힣])/g, () => ', '],
+  ],
+  list: [], file: [],
+};
+
+// 목록: 판단항목 알파벳에 맞춰 1부터 다시 번호 매김 (파일명은 현장비치 때문에 빈 번호가 정상이라 제외)
+function renumber(lines, log) {
+  let head = null; const cnt = {};
+  return lines.map((s, i) => {
+    const h = s.match(/^([a-z])\) /); if (h) { head = h[1]; return s; }
+    const it = s.match(/^([a-z])-(\d+)\. /); if (!it) return s;
+    const l = head || it[1]; cnt[l] = (cnt[l] || 0) + 1;
+    const nu = `${l}-${cnt[l]}. `;
+    if (nu !== it[0]) { log.push({ ln: i + 1, rule: '제안: 번호 다시 매김', from: it[0], to: nu, sug: true }); return nu + s.slice(it[0].length); }
+    return s;
+  });
+}
+
+function correct(text, mode, extra = {}, opt = {}) {
   const log = [];
   const x = buildExtra(extra, mode);
-  const lines = text.split('\n').map((raw, i) => {
+  const auto = text.split('\n').map((raw, i) => {
     if (!raw.trim()) return '';
     let s = applyRules(raw, x.pre, log, i + 1);
     s = applyRules(s, COMMON, log, i + 1);
     s = applyRules(s, MODE[mode], log, i + 1);
     s = applyRules(s, x.post, log, i + 1);
     s = applyRules(s, TAIL, log, i + 1);
-    s = s.replace(/[ \t]+$/, '');
-    return s;
+    return s.replace(/[ \t]+$/, '');
   });
+  let lines = auto;
+  if (opt.suggest) {
+    const n0 = log.length;
+    lines = auto.map((s, i) => s ? applyRules(s, SUGGEST[mode], log, i + 1).replace(/[ \t]+$/, '') : s);
+    if (mode === 'list') lines = renumber(lines, log);
+    for (let k = n0; k < log.length; k++) log[k].sug = true;
+  }
   const warns = check(lines, mode);
   lines.forEach((s, i) => x.warns.forEach(w => {
     w.re.lastIndex = 0; const m = s.match(w.re);
     if (m) warns.push({ ln: i + 1, msg: `${esc(w.msg)} (<b>${esc(m[0])}</b>)` });
   }));
-  return { text: lines.join('\n'), log, warns };
+  return { text: lines.join('\n'), auto: auto.join('\n'), log, warns };
 }
 
 // ---------- 확인 필요(경고) ----------
@@ -144,7 +177,9 @@ function check(lines, mode) {
       const max = Math.max(...ns);
       const miss = []; for (let k = 1; k <= max; k++) if (!ns.includes(k)) miss.push(`${l}-${k}`);
       const dup = ns.filter((n, i) => ns.indexOf(n) !== i);
-      if (miss.length) add(null, `번호가 빠졌습니다: <b>${miss.join(', ')}</b> (1부터 빠짐없이)`);
+      if (miss.length) add(null, mode === 'file'
+        ? `파일이 없는 번호: <b>${miss.join(', ')}</b> (현장비치 자료라면 정상입니다. 아니면 목록 번호를 확인해 주세요.)`
+        : `번호가 빠졌습니다: <b>${miss.join(', ')}</b> (1부터 빠짐없이)`);
       if (dup.length) add(null, `번호가 중복됩니다: <b>${[...new Set(dup)].map(n => `${l}-${n}`).join(', ')}</b>`);
     }
   }
