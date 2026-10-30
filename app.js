@@ -77,10 +77,10 @@ function render() {
     `<span class="stat ok">자동 수정 ${r.log.length - nSug}건</span>` +
     (useSug ? `<span class="stat warn">제안 반영 ${nSug}건</span>` : '') +
     `<span class="stat ${nWarn ? 'warn' : 'ok'}">${useSug ? '남은 ' : ''}확인 필요 ${nWarn}건</span>` +
-    (mode === 'status' ? `<span class="stat ${len > 6000 ? 'over' : ''}">글자수 ${comma(len)} / 6,000자</span>` : '');
+    (mode !== 'file' ? `<span class="stat ${len > 6000 ? 'over' : ''}">글자수 ${comma(len)} / 6,000자</span>` : '');
   const ws = r.warns.slice();
   if (mode === 'file') ws.push(...folderWarns);
-  if (mode === 'status' && len > 6000) ws.unshift({ msg: `<b>글자수 초과</b> · ${comma(len)}자입니다. 평가요소별 입력칸은 6,000자(띄어쓰기 포함)까지입니다.` });
+  if (mode !== 'file' && len > 6000) ws.unshift({ msg: `<b>글자수 초과</b> · ${comma(len)}자입니다. 〈입증자료〉·〈현황 및 분석결과〉 칸은 각 6,000자(띄어쓰기 포함)까지입니다. 분량이 넘으면 중요한 문서 중심으로 줄여 주세요.` });
   $('warns').innerHTML = ws.map(x => `<li><span class="lnb">${x.ln ? x.ln + '줄' : (x.tag || '전체')}</span>${x.msg}</li>`).join('');
   $('alert').classList.toggle('ok', !ws.length);
   $('alert-count').textContent = ws.length;
