@@ -20,8 +20,10 @@ function setConn(state, msg) {
   const el = $('conn');
   el.className = 'conn ' + (state === 'on' ? 'on' : state === 'err' ? 'err' : '');
   el.textContent = state === 'on' ? `학교 사전 연결됨 · 사전 ${extra.terms.length} · 규칙 ${extra.rules.length}`
-    : state === 'err' ? '학교 사전 연결 오류' : '기본 규칙만 사용 중 (Supabase 미연결)';
-  if (msg) el.title = msg;
+    : state === 'err' ? '학교 사전 연결 오류 (눌러서 내용 보기)' : '기본 규칙만 사용 중 (Supabase 미연결)';
+  el.title = msg || '';
+  el.style.cursor = msg ? 'pointer' : '';
+  el.onclick = msg ? () => toast('오류 내용: ' + msg) : null;
 }
 
 async function loadExtra() {
@@ -72,15 +74,18 @@ function render() {
     : '<span class="empty">입력하면 바로 정정됩니다.</span>';
   const nSug = r.log.filter(x => x.sug).length;
   const nWarn = r.warns.length + (mode === 'file' ? folderWarns.length : 0);
-  const len = r.text.replace(/\n/g, '').length;
+  // 평가인증시스템 입력칸 6,000자: 줄바꿈도 글자로 셀 수 있어 포함한 값을 기준으로 함
+  const body = r.text.replace(/\n+$/, '');
+  const lenNl = body.length, lenNoNl = body.replace(/\n/g, '').length, len = lenNl;
+  const counted = mode === 'status' || mode === 'list';
   $('stats').innerHTML =
     `<span class="stat ok">자동 수정 ${r.log.length - nSug}건</span>` +
     (useSug ? `<span class="stat warn">제안 반영 ${nSug}건</span>` : '') +
     `<span class="stat ${nWarn ? 'warn' : 'ok'}">${useSug ? '남은 ' : ''}확인 필요 ${nWarn}건</span>` +
-    (mode === 'status' ? `<span class="stat ${len > 6000 ? 'over' : ''}">글자수 ${comma(len)} / 6,000자</span>` : '');
+    (counted ? `<span class="stat ${len > 6000 ? 'over' : len > 5400 ? 'warn' : ''}" title="줄바꿈 제외 ${comma(lenNoNl)}자">글자수 ${comma(len)} / 6,000자 · ${len > 6000 ? `<b>${comma(len - 6000)}자 초과</b>` : `${comma(6000 - len)}자 남음`}</span>` : '');
   const ws = r.warns.slice();
   if (mode === 'file') ws.push(...folderWarns);
-  if (mode === 'status' && len > 6000) ws.unshift({ msg: `<b>글자수 초과</b> · ${comma(len)}자입니다. 평가요소별 입력칸은 6,000자(띄어쓰기 포함)까지입니다.` });
+  if (counted && len > 6000) ws.unshift({ msg: `<b>글자수 ${comma(len - 6000)}자 초과</b> · 지금 ${comma(len)}자(줄바꿈 제외 ${comma(lenNoNl)}자)입니다. 「평가인증시스템」 입력칸은 평가요소별로 칸마다 6,000자(띄어쓰기 포함)까지입니다.` });
   $('warns').innerHTML = ws.map(x => `<li><span class="lnb">${x.ln ? x.ln + '줄' : (x.tag || '전체')}</span>${x.msg}</li>`).join('');
   $('alert').classList.toggle('ok', !ws.length);
   $('alert-count').textContent = ws.length;
@@ -438,7 +443,7 @@ function route() {
 }
 window.addEventListener('hashchange', route);
 
-function toast(msg) { const el = $('toast'); el.textContent = msg; el.hidden = false; clearTimeout(el._t); el._t = setTimeout(() => el.hidden = true, 2200); }
+function toast(msg) { const el = $('toast'); el.textContent = msg; el.hidden = false; clearTimeout(el._t); el._t = setTimeout(() => el.hidden = true, msg.length > 40 ? 8000 : 2200); }
 
 setMode(mode);
 route();
